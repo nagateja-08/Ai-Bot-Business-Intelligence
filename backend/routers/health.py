@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Response, status
-from backend.database import check_db_connection
+from database import check_db_connection
 from backend.services.groq_service import groq_service
 from backend.config import settings
 from backend.schemas import HealthResponse
