@@ -10,7 +10,7 @@ services:
     plan: free
     rootDir: .
     buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "python backend/init_db.py && uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -21,7 +21,7 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       - key: FRONTEND_ORIGIN
         sync: false
         # Set to the URL of the deployed frontend static site (e.g. https://salesiq-frontend.onrender.com)
