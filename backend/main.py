@@ -4,9 +4,9 @@ from fastapi.responses import JSONResponse
 import logging
 from contextlib import asynccontextmanager
 
-from config import settings
-from database import check_db_connection
-from routers import health, analytics, chat
+from backend.config import settings
+from backend.database import check_db_connection
+from backend.routers import health, analytics, chat
 
 # Configure logging
 logging.basicConfig(
