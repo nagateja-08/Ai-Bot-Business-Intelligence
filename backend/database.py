@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator, Dict, Any
 import logging
-from backend.config import settings
+from config import settings
 
 logger = logging.getLogger("salesiq.database")
 
