@@ -295,3 +295,53 @@ class AnalyticsService:
             })
         res.sort(key=lambda x: x["net_revenue"], reverse=True)
         return res
+
+    @staticmethod
+    def get_transaction_by_id(db: Session, transaction_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves complete line-item data for a specific transaction ID.
+        """
+        clean_id = transaction_id.strip().upper()
+        sale = db.query(Sale).filter(func.upper(Sale.transaction_id) == clean_id).first()
+        if not sale:
+            return None
+        return {
+            "transaction_id": sale.transaction_id,
+            "order_date": sale.order_date.strftime("%d-%m-%Y"),
+            "product": sale.product,
+            "category": sale.category,
+            "region": sale.region,
+            "sales_channel": sale.sales_channel,
+            "quantity": sale.quantity,
+            "unit_price": float(sale.unit_price),
+            "discount_amount": float(sale.discount_amount),
+            "status": sale.status,
+            "net_revenue": float(sale.net_revenue)
+        }
+
+    @staticmethod
+    def get_all_products(db: Session) -> List[Dict[str, Any]]:
+        """
+        Returns list of all unique products with prices and categories.
+        """
+        sales = db.query(Sale).all()
+        products_map = {}
+        for s in sales:
+            if s.product not in products_map:
+                products_map[s.product] = {
+                    "product": s.product,
+                    "category": s.category,
+                    "unit_price": float(s.unit_price),
+                    "total_units": 0
+                }
+            products_map[s.product]["total_units"] += s.quantity
+        return list(products_map.values())
+
+    @staticmethod
+    def get_all_regions(db: Session) -> List[str]:
+        """
+        Returns list of all unique sales regions.
+        """
+        regions = db.query(Sale.region).distinct().all()
+        return [r[0] for r in regions if r[0]]
+

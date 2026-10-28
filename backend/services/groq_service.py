@@ -18,6 +18,10 @@ except ImportError:
     Groq = None
 
 INTENT_ALLOWLIST = {
+    IntentEnum.GREETING,
+    IntentEnum.TRANSACTION_DETAILS,
+    IntentEnum.LIST_PRODUCTS,
+    IntentEnum.LIST_REGIONS,
     IntentEnum.TOTAL_REVENUE,
     IntentEnum.TOTAL_ORDERS,
     IntentEnum.TOP_PRODUCTS,
@@ -33,19 +37,24 @@ INTENT_SYSTEM_PROMPT = """You are the AI Query Interpreter for SalesIQ, an enter
 Your sole job is to interpret the user's business question and categorize it into exactly one of the supported intents with any relevant parameters.
 
 Supported intents:
-1. "total_revenue" - Questions asking about total revenue, overall sales, gross or net earnings, total turnover, or overall performance.
-2. "total_orders" - Questions asking about total records, total rows, how many transactions, how many orders, count of records.
-3. "top_products" - Questions asking about highest selling products, best-performing products, top products by revenue.
-4. "monthly_trend" - Questions asking about monthly revenue trend, revenue over time, month-over-month performance, or historical sales.
-5. "region_revenue" - Questions asking about sales/revenue by region, top region, geographical distribution, or which area did best.
-6. "month_comparison" - Questions asking to compare revenue between two months (e.g. "between April and May", "from Jan to Feb", "how did revenue change").
-7. "category_breakdown" - Questions asking about performance by product category (Accessories, Furniture, Electronics).
-8. "unsupported" - Any question outside of sales analytics for this store (e.g. general chit-chat, weather, coding questions, or requests to modify database).
+1. "greeting" - Greetings (e.g. "hello", "hi", "good morning", "hey"), capabilities/identity questions ("who are you", "what can you do", "help").
+2. "transaction_details" - Questions asking about a specific transaction or order ID (e.g. "what is the data present in TXN0051", "details of TXN0033", "show order TXN0010"). Extract the transaction ID into parameters.transaction_id.
+3. "total_revenue" - Questions asking about total revenue, overall sales, gross or net earnings, total turnover, or overall performance.
+4. "total_orders" - Questions asking about total records, total rows, how many transactions, how many orders, count of records.
+5. "top_products" - Questions asking about highest selling products, best-performing products, top products by revenue.
+6. "list_products" - Questions asking what products are sold or available in the store (e.g. "what products do you sell?", "list all products").
+7. "monthly_trend" - Questions asking about monthly revenue trend, revenue over time, month-over-month performance, or historical sales.
+8. "region_revenue" - Questions asking about sales/revenue by region, top region, geographical distribution, or which area did best.
+9. "list_regions" - Questions asking what regions exist in the store (e.g. "what regions do you operate in?", "list regions").
+10. "month_comparison" - Questions asking to compare revenue between two months (e.g. "between April and May", "from Jan to Feb", "how did revenue change").
+11. "category_breakdown" - Questions asking about performance by product category (Accessories, Furniture, Electronics).
+12. "unsupported" - Any question outside of sales analytics for this store (e.g. general chit-chat, weather, coding questions, or requests to modify database).
 
 You must respond ONLY with a valid JSON object matching this schema:
 {
-  "intent": "total_revenue" | "total_orders" | "top_products" | "monthly_trend" | "region_revenue" | "month_comparison" | "category_breakdown" | "unsupported",
+  "intent": "greeting" | "transaction_details" | "total_revenue" | "total_orders" | "top_products" | "list_products" | "monthly_trend" | "region_revenue" | "list_regions" | "month_comparison" | "category_breakdown" | "unsupported",
   "parameters": {
+    "transaction_id": "optional string e.g. TXN0051 or null",
     "month1": "optional string or null",
     "month2": "optional string or null",
     "limit": "optional integer or null",
@@ -78,7 +87,7 @@ class GroqService:
     def _fallback_intent_classifier(self, question: str) -> Tuple[IntentEnum, Dict[str, Any]]:
         """
         Deterministic regex and keyword-based classifier that guarantees reliable recognition
-        for all core evaluation questions and standard BI queries.
+        for all core evaluation questions, greetings, transaction lookups, and standard BI queries.
         """
         q = question.lower().strip()
 
@@ -86,7 +95,27 @@ class GroqService:
         if any(term in q for term in ["drop table", "delete from", "insert into", "update sales", "select *", "union select"]):
             return IntentEnum.UNSUPPORTED, {}
 
-        # Record count / total rows / total transactions / orders
+        # 1. Specific Transaction ID lookup (e.g. TXN0051, TXN0033)
+        txn_match = re.search(r"\b(txn\d+)\b", q)
+        if txn_match:
+            return IntentEnum.TRANSACTION_DETAILS, {"transaction_id": txn_match.group(1).upper()}
+
+        # 2. Greetings & Identity / Capabilities
+        greeting_words = ["hello", "hi", "hey", "hola", "namaste", "greetings", "good morning", "good afternoon", "good evening"]
+        if any(re.search(r"\b" + re.escape(w) + r"\b", q) for w in greeting_words) or \
+           any(p in q for p in ["who are you", "what are you", "your name", "what can you do", "help me", "how can you help", "what do you do", "introduce yourself", "how are you"]) or \
+           q in ["help", "info", "about", "hi there", "hello there"]:
+            return IntentEnum.GREETING, {}
+
+        # 3. List Products
+        if any(phrase in q for phrase in ["what products", "list products", "show products", "which products", "all products", "products available", "products do you sell", "what do you sell"]):
+            return IntentEnum.LIST_PRODUCTS, {}
+
+        # 4. List Regions
+        if any(phrase in q for phrase in ["what regions", "list regions", "which regions", "all regions", "regions available", "what areas"]):
+            return IntentEnum.LIST_REGIONS, {}
+
+        # 5. Record count / total rows / total transactions / orders
         if any(term in q for term in ["how many records", "total rows", "how many rows", "record count", "row count", "how many transactions", "total transactions", "how many orders", "total orders", "number of records"]):
             return IntentEnum.TOTAL_ORDERS, {}
 
@@ -127,13 +156,9 @@ class GroqService:
         Interprets natural language question into an allowlisted intent.
         Uses Groq LLM if available; gracefully falls back to deterministic parsing.
         """
-        # First check deterministic rules for high-confidence matches (record count, core 5)
         det_intent, det_params = self._fallback_intent_classifier(question)
-        if det_intent in [IntentEnum.TOTAL_ORDERS, IntentEnum.TOTAL_REVENUE, IntentEnum.TOP_PRODUCTS, IntentEnum.MONTHLY_TREND, IntentEnum.REGION_REVENUE, IntentEnum.MONTH_COMPARISON]:
-            # If deterministic matches directly, we can use it or augment with Groq
-            if not self.is_configured():
-                return det_intent, det_params, "deterministic_engine"
 
+        # If Groq is not configured, immediately use deterministic classifier
         if not self.is_configured():
             return det_intent, det_params, "deterministic_engine"
 
@@ -161,15 +186,19 @@ class GroqService:
                     matched_intent = intent
                     break
 
+            # If LLM classified as unsupported, but deterministic classifier caught it
             if matched_intent == IntentEnum.UNSUPPORTED and det_intent != IntentEnum.UNSUPPORTED:
                 return det_intent, det_params, "deterministic_engine"
+
+            # If transaction_id was missed by LLM, populate from deterministic extraction
+            if matched_intent == IntentEnum.TRANSACTION_DETAILS and not params.get("transaction_id") and det_params.get("transaction_id"):
+                params["transaction_id"] = det_params["transaction_id"]
 
             return matched_intent, params, "groq_ai"
 
         except Exception as e:
             logger.warning(f"Groq intent extraction failed ({e}). Falling back to deterministic classifier.")
-            intent, params = self._fallback_intent_classifier(question)
-            return intent, params, "deterministic_engine"
+            return det_intent, det_params, "deterministic_engine"
 
     def synthesize_answer(
         self,
@@ -182,17 +211,54 @@ class GroqService:
         Generates a concise, executive business explanation strictly grounded in verified database results.
         Never allows hallucination of numbers.
         """
-        # Never call LLM for unsupported queries or null data
+        # Greeting handler
+        if intent == IntentEnum.GREETING:
+            return (
+                "Hello! 👋 I am **SalesIQ**, your AI-Powered Business Intelligence Assistant.\n\n"
+                "I can analyze your store's sales records and answer questions about:\n"
+                "• **Total Revenue & Volume**: *\"What is the total revenue?\"* or *\"How many records are there in total?\"*\n"
+                "• **Product Insights**: *\"Which product generated the highest revenue?\"* or *\"What products do you sell?\"*\n"
+                "• **Regional Performance**: *\"Which region generated the highest sales?\"*\n"
+                "• **Monthly Trends**: *\"What is the monthly revenue trend?\"* or *\"How did revenue change between April and May?\"*\n"
+                "• **Order Lookup**: *\"What is the data present in TXN0051?\"* (or any transaction from TXN0001 to TXN0051)\n\n"
+                "What would you like to explore today?"
+            )
+
+        # Handle unsupported / chit-chat gracefully with LLM if available
         if intent == IntentEnum.UNSUPPORTED or db_results is None:
+            if self.is_configured():
+                try:
+                    resp = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are SalesIQ, a polite, helpful Business Intelligence AI Assistant. "
+                                    "The user asked a query that is not a direct sales calculation. "
+                                    "Provide a brief, polite, helpful 1-2 sentence response, and guide them on what "
+                                    "sales questions they can ask (e.g. total revenue, top products, monthly trends, "
+                                    "regional sales, or order details like TXN0051)."
+                                )
+                            },
+                            {"role": "user", "content": question}
+                        ],
+                        temperature=0.3,
+                        max_tokens=150
+                    )
+                    return resp.choices[0].message.content.strip()
+                except Exception:
+                    pass
+
             return (
                 "I could not find an analytics answer for that query. "
                 "Try asking questions like: 'What is the total revenue?', 'How many records are there in total?', "
-                "'Which product generated the highest revenue?', 'What is the monthly revenue trend?', "
-                "'Which region generated the highest sales?', or 'How did revenue change between April and May?'"
+                "'Which product generated the highest revenue?', 'What is the data present in TXN0051?', "
+                "'What is the monthly revenue trend?', or 'Which region generated the highest sales?'"
             )
 
         # If Groq is available and source was AI, synthesize with Groq
-        if self.is_configured() and source == "groq_ai":
+        if self.is_configured() and source == "groq_ai" and intent not in [IntentEnum.GREETING]:
             try:
                 synthesis_prompt = f"""You are SalesIQ Assistant. Summarize the following verified database results for the user's question: "{question}".
 
@@ -219,7 +285,41 @@ Database Results:
                 logger.warning(f"Groq answer synthesis failed ({e}). Using deterministic template.")
 
         # Deterministic Grounded Templates (Fail-safe, 100% accurate)
-        if intent == IntentEnum.TOTAL_ORDERS:
+        if intent == IntentEnum.TRANSACTION_DETAILS:
+            txn = db_results.get("transaction") if isinstance(db_results, dict) else None
+            if txn:
+                discount_text = f"₹{txn.get('discount_amount', 0):,.2f}" if txn.get('discount_amount', 0) > 0 else "None (₹0.00)"
+                return (
+                    f"Here is the verified data for transaction **{txn.get('transaction_id')}**:\n\n"
+                    f"• **Product**: **{txn.get('product')}** ({txn.get('category')})\n"
+                    f"• **Order Date**: {txn.get('order_date')}\n"
+                    f"• **Region**: {txn.get('region')} ({txn.get('sales_channel')} channel)\n"
+                    f"• **Quantity**: {txn.get('quantity')} units @ ₹{txn.get('unit_price', 0):,.2f} each\n"
+                    f"• **Discount Applied**: {discount_text}\n"
+                    f"• **Order Status**: **{txn.get('status')}**\n"
+                    f"• **Net Realized Revenue**: **₹{txn.get('net_revenue', 0):,.2f}**"
+                )
+            else:
+                tid = db_results.get("transaction_id", "specified") if isinstance(db_results, dict) else "specified"
+                return (
+                    f"Transaction **{tid}** was not found in the database. "
+                    f"The dataset contains 50 records ranging from **TXN0001** to **TXN0051**."
+                )
+
+        elif intent == IntentEnum.LIST_PRODUCTS:
+            prods = db_results.get("products", []) if isinstance(db_results, dict) else []
+            if prods:
+                items = "\n".join([f"• **{p['product']}** ({p['category']}) — ₹{p['unit_price']:,.2f} (Total volume: {p['total_units']} units)" for p in prods])
+                return f"SalesIQ tracks sales across **{len(prods)} products**:\n\n{items}"
+            return "No products found in the catalog."
+
+        elif intent == IntentEnum.LIST_REGIONS:
+            regs = db_results.get("regions", []) if isinstance(db_results, dict) else []
+            if regs:
+                return f"The store operates across **{len(regs)} geographic regions**: **{', '.join(regs)}**."
+            return "No region information available."
+
+        elif intent == IntentEnum.TOTAL_ORDERS:
             total = db_results.get("total_transactions", 0)
             completed = db_results.get("completed_transactions", 0)
             returned = db_results.get("returned_transactions", 0)
@@ -296,8 +396,8 @@ Database Results:
         return (
             "I could not find an analytics answer for that query. "
             "Try asking questions like: 'What is the total revenue?', 'How many records are there in total?', "
-            "'Which product generated the highest revenue?', 'What is the monthly revenue trend?', "
-            "'Which region generated the highest sales?', or 'How did revenue change between April and May?'"
+            "'Which product generated the highest revenue?', 'What is the data present in TXN0051?', "
+            "'What is the monthly revenue trend?', or 'Which region generated the highest sales?'"
         )
 
     def process_chat_query(self, question: str, db: Session) -> ChatResponse:
@@ -315,7 +415,39 @@ Database Results:
         visual_type = "none"
 
         try:
-            if intent == IntentEnum.TOTAL_REVENUE:
+            if intent == IntentEnum.GREETING:
+                data = {"greeting": True}
+                visual_type = "none"
+
+            elif intent == IntentEnum.TRANSACTION_DETAILS:
+                txn_id = params.get("transaction_id")
+                if not txn_id:
+                    txn_match = re.search(r"\b(txn\d+)\b", question.lower())
+                    if txn_match:
+                        txn_id = txn_match.group(1).upper()
+                if txn_id:
+                    txn_record = AnalyticsService.get_transaction_by_id(db, txn_id)
+                    if txn_record:
+                        data = {"transaction": txn_record}
+                        visual_type = "metric"
+                    else:
+                        data = {"transaction_id": txn_id, "found": False}
+                        visual_type = "none"
+                else:
+                    data = None
+                    visual_type = "none"
+
+            elif intent == IntentEnum.LIST_PRODUCTS:
+                products = AnalyticsService.get_all_products(db)
+                data = {"products": products}
+                visual_type = "table"
+
+            elif intent == IntentEnum.LIST_REGIONS:
+                regions = AnalyticsService.get_all_regions(db)
+                data = {"regions": regions}
+                visual_type = "metric"
+
+            elif intent == IntentEnum.TOTAL_REVENUE:
                 metrics = AnalyticsService.get_overview(db)
                 data = metrics.model_dump()
                 visual_type = "metric"

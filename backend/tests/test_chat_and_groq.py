@@ -104,3 +104,21 @@ def test_full_chat_query_pipeline(mock_db_session):
     assert "138,250" in resp.answer
     assert resp.visual_type == "metric"
     assert resp.data is not None
+
+def test_greeting_intent_and_response(mock_db_session):
+    """Test that greetings like 'hello' or 'hi' return friendly executive greeting"""
+    service = GroqService()
+    intent, params = service._fallback_intent_classifier("hello")
+    assert intent == IntentEnum.GREETING
+
+    resp = service.process_chat_query("hello", mock_db_session)
+    assert resp.intent == IntentEnum.GREETING
+    assert "Welcome to SalesIQ" in resp.answer or "SalesIQ" in resp.answer
+
+def test_transaction_details_lookup(mock_db_session):
+    """Test looking up specific transaction ID like TXN0051"""
+    service = GroqService()
+    intent, params = service._fallback_intent_classifier("what is the data present in TXN0051")
+    assert intent == IntentEnum.TRANSACTION_DETAILS
+    assert params.get("transaction_id") == "TXN0051"
+

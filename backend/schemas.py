@@ -12,6 +12,10 @@ class IntentEnum(str, Enum):
     STATUS_BREAKDOWN = "status_breakdown"
     CHANNEL_BREAKDOWN = "channel_breakdown"
     TOTAL_ORDERS = "total_orders"
+    TRANSACTION_DETAILS = "transaction_details"
+    LIST_PRODUCTS = "list_products"
+    LIST_REGIONS = "list_regions"
+    GREETING = "greeting"
     GENERAL_QUERY = "general_query"
     UNSUPPORTED = "unsupported"
 

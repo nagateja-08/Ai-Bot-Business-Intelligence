@@ -221,7 +221,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = () => {
               </div>
 
               {/* Dynamic Visual Add-ons */}
-              {msg.visualType === 'metric' && msg.data && (
+              {msg.visualType === 'metric' && msg.data && msg.data.total_net_revenue !== undefined && (
                 <div className="mt-3 p-3 rounded-xl bg-slate-900/80 border border-slate-700/60 grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-slate-400 block">Total Net Revenue</span>
@@ -234,6 +234,40 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = () => {
                     <span className="text-base font-bold text-white">
                       {msg.data.completed_transactions}
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {msg.data?.transaction && (
+                <div className="mt-3 p-3.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-xs space-y-2.5">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                    <span className="font-mono font-bold text-brand-300 text-sm">{msg.data.transaction.transaction_id}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      msg.data.transaction.status === 'Completed'
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                    }`}>
+                      {msg.data.transaction.status}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Product</span>
+                      <span className="font-semibold text-white">{msg.data.transaction.product}</span>
+                      <span className="text-[10px] text-slate-400 block">{msg.data.transaction.category}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Net Realized Revenue</span>
+                      <span className="font-bold text-emerald-400 text-sm">₹{msg.data.transaction.net_revenue?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Date & Region</span>
+                      <span className="text-slate-300">{msg.data.transaction.order_date} • {msg.data.transaction.region}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Quantity & Price</span>
+                      <span className="text-slate-300">{msg.data.transaction.quantity} units @ ₹{msg.data.transaction.unit_price?.toLocaleString('en-IN')}</span>
+                    </div>
                   </div>
                 </div>
               )}
