@@ -1,0 +1,48 @@
+# Render Infrastructure Blueprint for SalesIQ Monorepo
+services:
+  # -------------------------------------------------------------
+  # 1. FastAPI Python Backend Service
+  # -------------------------------------------------------------
+  - type: web
+    name: salesiq-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: DATABASE_URL
+        sync: false
+        # Example: mysql+pymysql://USER:PASSWORD@HOST:PORT/salesiq_db?ssl_ca=/etc/ssl/certs/ca-certificates.crt
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: FRONTEND_ORIGIN
+        sync: false
+        # Set to the URL of the deployed frontend static site (e.g. https://salesiq-frontend.onrender.com)
+      - key: CSV_PATH
+        value: ai_bi_assistant_sales_data_cleaned.csv
+
+  # -------------------------------------------------------------
+  # 2. React + Vite Static Frontend Site
+  # -------------------------------------------------------------
+  - type: static
+    name: salesiq-frontend
+    env: static
+    region: oregon
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+        # Set to the URL of the deployed backend (e.g. https://salesiq-backend.onrender.com)
