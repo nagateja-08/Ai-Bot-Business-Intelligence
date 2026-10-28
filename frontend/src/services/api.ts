@@ -12,14 +12,29 @@ import {
   SuggestionList
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const getBaseUrl = (): string => {
+  // 1. Explicit build/env variable
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.trim() !== '' && envUrl !== 'http://localhost:8000') {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  // 2. Auto-detect if running on Render (salesiq-frontend.onrender.com -> salesiq-backend.onrender.com)
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    const backendHost = window.location.hostname.replace('-frontend', '-backend');
+    return `https://${backendHost}`;
+  }
+  // 3. Fallback for local development
+  return 'http://localhost:8000';
+};
+
+export const API_BASE_URL = getBaseUrl();
 
 const client = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 25000,
 });
 
 export const api = {

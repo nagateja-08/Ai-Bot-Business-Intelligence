@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Database, Terminal, CheckCircle2 } from 'lucide-react';
 import { HealthResponse } from '../types';
+import { API_BASE_URL } from '../services/api';
 
 interface ConnectionBannerProps {
   health: HealthResponse | null;
@@ -8,6 +9,8 @@ interface ConnectionBannerProps {
 }
 
 export const ConnectionBanner: React.FC<ConnectionBannerProps> = ({ health, onRetry }) => {
+  const isRender = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
+
   // If health is null (cannot reach backend at all)
   if (!health) {
     return (
@@ -16,8 +19,17 @@ export const ConnectionBanner: React.FC<ConnectionBannerProps> = ({ health, onRe
           <div className="flex items-center space-x-2.5">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
             <div>
-              <span className="font-bold text-white">Backend Server Unreachable:</span> Make sure FastAPI is running on port 8000 (
-              <code className="bg-rose-900/40 px-1.5 py-0.5 rounded font-mono text-rose-300">python -m uvicorn backend.main:app --port 8000</code>).
+              <span className="font-bold text-white">Backend Server Unreachable:</span>{' '}
+              {isRender ? (
+                <span>
+                  Targeting API at <code className="bg-rose-900/40 px-1.5 py-0.5 rounded font-mono text-rose-300">{API_BASE_URL}</code>.
+                  Ensure your backend Web Service is running on Render and set in <code className="bg-rose-900/40 px-1.5 py-0.5 rounded font-mono text-rose-300">VITE_API_BASE_URL</code>.
+                </span>
+              ) : (
+                <span>
+                  Make sure FastAPI is running on port 8000 (<code className="bg-rose-900/40 px-1.5 py-0.5 rounded font-mono text-rose-300">python -m uvicorn backend.main:app --port 8000</code>).
+                </span>
+              )}
             </div>
           </div>
           <button
