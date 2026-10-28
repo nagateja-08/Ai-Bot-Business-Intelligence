@@ -2,9 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from backend.database import get_db
-from backend.services.groq_service import groq_service
-from backend.schemas import ChatRequest, ChatResponse, SuggestionList
+try:
+    from backend.database import get_db
+    from backend.services.groq_service import groq_service
+    from backend.schemas import ChatRequest, ChatResponse, SuggestionList
+except ImportError:
+    from database import get_db
+    from services.groq_service import groq_service
+    from schemas import ChatRequest, ChatResponse, SuggestionList
 
 router = APIRouter(prefix="/api", tags=["AI Chat & Suggestions"])
 

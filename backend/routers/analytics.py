@@ -2,16 +2,28 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 
-from backend.database import get_db
-from backend.services.analytics_service import AnalyticsService
-from backend.schemas import (
-    OverviewMetrics,
-    MonthlyRevenueItem,
-    RegionalRevenueItem,
-    TopProductItem,
-    MonthComparison
-)
-from backend.models import Sale
+try:
+    from backend.database import get_db
+    from backend.services.analytics_service import AnalyticsService
+    from backend.schemas import (
+        OverviewMetrics,
+        MonthlyRevenueItem,
+        RegionalRevenueItem,
+        TopProductItem,
+        MonthComparison
+    )
+    from backend.models import Sale
+except ImportError:
+    from database import get_db
+    from services.analytics_service import AnalyticsService
+    from schemas import (
+        OverviewMetrics,
+        MonthlyRevenueItem,
+        RegionalRevenueItem,
+        TopProductItem,
+        MonthComparison
+    )
+    from models import Sale
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 

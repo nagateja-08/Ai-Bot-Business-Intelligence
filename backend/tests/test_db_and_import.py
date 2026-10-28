@@ -63,6 +63,8 @@ def test_sale_revenue_properties():
 def test_csv_file_integrity():
     """Verify cleaned CSV file exists and has correct columns and row count"""
     csv_path = Path("ai_bi_assistant_sales_data_cleaned.csv")
+    if not csv_path.exists():
+        csv_path = Path(__file__).resolve().parent.parent.parent / "ai_bi_assistant_sales_data_cleaned.csv"
     assert csv_path.exists(), "CSV file must exist in workspace root"
 
     df = pd.read_csv(csv_path)

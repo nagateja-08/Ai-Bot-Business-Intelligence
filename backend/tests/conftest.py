@@ -1,3 +1,16 @@
+import sys
+from pathlib import Path
+
+# Add project root and backend directory to sys.path
+_test_dir = Path(__file__).resolve().parent
+_backend_dir = _test_dir.parent
+_root_dir = _backend_dir.parent
+
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
+
 import pytest
 from decimal import Decimal
 from datetime import date
@@ -5,9 +18,14 @@ from typing import List
 from unittest.mock import MagicMock
 from sqlalchemy.orm import Session
 
-from backend.models import Sale
-from backend.main import app
-from backend.database import get_db
+try:
+    from backend.models import Sale
+    from backend.main import app
+    from backend.database import get_db
+except ImportError:
+    from models import Sale
+    from main import app
+    from database import get_db
 
 @pytest.fixture
 def sample_sales_data() -> List[Sale]:

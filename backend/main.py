@@ -1,12 +1,27 @@
+import sys
+from pathlib import Path
+
+_current_dir = Path(__file__).resolve().parent
+_root_dir = _current_dir.parent
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 from contextlib import asynccontextmanager
 
-from backend.config import settings
-from backend.database import check_db_connection
-from backend.routers import health, analytics, chat
+try:
+    from backend.config import settings
+    from backend.database import check_db_connection
+    from backend.routers import health, analytics, chat
+except ImportError:
+    from config import settings
+    from database import check_db_connection
+    from routers import health, analytics, chat
 
 # Configure logging
 logging.basicConfig(

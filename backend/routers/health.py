@@ -1,8 +1,25 @@
+import sys
+from pathlib import Path
+
+_current_dir = Path(__file__).resolve().parent.parent
+_root_dir = _current_dir.parent
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
+
 from fastapi import APIRouter, Response, status
-from database import check_db_connection
-from services.groq_service import groq_service
-from backend.config import settings
-from backend.schemas import HealthResponse
+
+try:
+    from backend.database import check_db_connection
+    from backend.services.groq_service import groq_service
+    from backend.config import settings
+    from backend.schemas import HealthResponse
+except ImportError:
+    from database import check_db_connection
+    from services.groq_service import groq_service
+    from config import settings
+    from schemas import HealthResponse
 
 router = APIRouter(prefix="/api", tags=["Health"])
 
