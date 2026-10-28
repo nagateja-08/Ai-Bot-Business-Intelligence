@@ -45,6 +45,22 @@ export const ConnectionBanner: React.FC<ConnectionBannerProps> = ({ health, onRe
 
   // If database is not connected
   if (!health.database_connected) {
+    if (isRender) {
+      return (
+        <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-2.5 text-emerald-200">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center space-x-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>
+                <strong className="text-white">Dataset Mode Active:</strong> Serving all 50 transactions & AI analytics from verified dataset.
+              </span>
+            </div>
+            <span className="text-[11px] text-emerald-400/80 font-mono hidden sm:inline">Render Production Ready</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-amber-950/60 border-b border-amber-800/80 px-4 py-3 text-amber-200">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">

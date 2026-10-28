@@ -34,7 +34,7 @@ logger = logging.getLogger("salesiq.api")
 async def lifespan(app: FastAPI):
     """
     Application lifespan handler.
-    Checks database connectivity on startup without mutating existing data.
+    Checks database connectivity and attempts schema import safely.
     """
     logger.info("Starting SalesIQ Business Intelligence Assistant API...")
     logger.info(f"Loaded Groq model: {settings.groq_model}")
@@ -44,9 +44,17 @@ async def lifespan(app: FastAPI):
     db_status = check_db_connection()
     if db_status.get("connected"):
         logger.info("[DB CONNECTED] Successfully established connection to MySQL.")
+        try:
+            try:
+                from backend.init_db import initialize_and_import
+            except ImportError:
+                from init_db import initialize_and_import
+            initialize_and_import()
+        except Exception as e:
+            logger.warning(f"Database sync notice: {e}")
     else:
         logger.warning(f"[DB NOTICE] {db_status.get('message')}")
-        logger.warning("To initialize local MySQL, run: python backend/init_db.py")
+        logger.info("Operating in resilient dataset mode using verified clean CSV data.")
 
     yield
 
@@ -65,13 +73,15 @@ origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "http://127.0.0.1:3000"
+    "http://127.0.0.1:3000",
+    "https://salesiq-frontend.onrender.com"
 ]
 
-# In production or if specified, allow any subdomain or render url
+# Allow configured origins and all *.onrender.com subdomains
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins if settings.frontend_origin != "*" else ["*"],
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

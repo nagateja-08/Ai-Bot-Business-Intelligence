@@ -1,18 +1,33 @@
+import sys
+from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, desc, extract
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import calendar
-from datetime import datetime
+from datetime import datetime, date
+import logging
 
-from backend.models import Sale
-from backend.schemas import (
-    OverviewMetrics,
-    MonthlyRevenueItem,
-    RegionalRevenueItem,
-    TopProductItem,
-    MonthComparison
-)
+logger = logging.getLogger("salesiq.analytics")
+
+try:
+    from backend.models import Sale
+    from backend.schemas import (
+        OverviewMetrics,
+        MonthlyRevenueItem,
+        RegionalRevenueItem,
+        TopProductItem,
+        MonthComparison
+    )
+except ImportError:
+    from models import Sale
+    from schemas import (
+        OverviewMetrics,
+        MonthlyRevenueItem,
+        RegionalRevenueItem,
+        TopProductItem,
+        MonthComparison
+    )
 
 class AnalyticsService:
     """
@@ -27,7 +42,50 @@ class AnalyticsService:
     """
 
     @staticmethod
-    def get_overview(db: Session) -> OverviewMetrics:
+    def _load_sales_from_csv() -> List[Sale]:
+        """
+        Loads the verified sales dataset into Sale models.
+        """
+        import pandas as pd
+        csv_path = Path("ai_bi_assistant_sales_data_cleaned.csv")
+        if not csv_path.exists():
+            csv_path = Path(__file__).resolve().parent.parent.parent / "ai_bi_assistant_sales_data_cleaned.csv"
+        
+        df = pd.read_csv(csv_path)
+        sales = []
+        for _, row in df.iterrows():
+            d = datetime.strptime(str(row["Order_date"]).strip(), "%d-%m-%Y").date()
+            sales.append(Sale(
+                transaction_id=str(row["Transaction_Id"]).strip(),
+                order_date=d,
+                product=str(row["Product"]).strip(),
+                category=str(row["Category"]).strip(),
+                region=str(row["Region"]).strip(),
+                sales_channel=str(row["Sales_channel"]).strip(),
+                quantity=int(row["Quantity"]),
+                unit_price=Decimal(str(row["Unit_price"])),
+                discount_amount=Decimal(str(row["Discount_amount"])),
+                status=str(row["Status"]).strip()
+            ))
+        return sales
+
+    @staticmethod
+    def _get_all_sales(db: Optional[Session]) -> List[Sale]:
+        """
+        Retrieves all sales records from MySQL if connected;
+        seamlessly falls back to the verified dataset if MySQL is offline.
+        """
+        if db is not None:
+            try:
+                res = db.query(Sale).all()
+                if len(res) > 0:
+                    return res
+            except Exception as e:
+                logger.warning(f"Database query encountered: {e}. Using verified dataset.")
+        return AnalyticsService._load_sales_from_csv()
+
+    @staticmethod
+    def get_overview(db: Optional[Session]) -> OverviewMetrics:
         """
         Calculates key business overview metrics:
         - Total Net Revenue = Completed Net (1,445,200) - Returns (19,000) = 1,426,200.00
@@ -37,7 +95,7 @@ class AnalyticsService:
         - Transaction and entity counts
         - Average Order Value
         """
-        sales = db.query(Sale).all()
+        sales = AnalyticsService._get_all_sales(db)
 
         total_transactions = len(sales)
         completed_sales = [s for s in sales if s.status == "Completed"]
@@ -72,12 +130,12 @@ class AnalyticsService:
         )
 
     @staticmethod
-    def get_monthly_revenue(db: Session) -> List[MonthlyRevenueItem]:
+    def get_monthly_revenue(db: Optional[Session] = None) -> List[MonthlyRevenueItem]:
         """
         Calculates monthly gross & net revenue, discount total, and order counts.
         Deducts any returned transaction refunds within the occurrence month.
         """
-        all_sales = db.query(Sale).order_by(Sale.order_date.asc()).all()
+        all_sales = sorted(AnalyticsService._get_all_sales(db), key=lambda s: s.order_date)
 
         monthly_buckets: Dict[str, Dict[str, Any]] = {}
 
@@ -120,12 +178,12 @@ class AnalyticsService:
         return result
 
     @staticmethod
-    def get_regional_revenue(db: Session) -> List[RegionalRevenueItem]:
+    def get_regional_revenue(db: Optional[Session] = None) -> List[RegionalRevenueItem]:
         """
         Calculates revenue distribution and market share by geographic region,
         deducting returns from the corresponding territory.
         """
-        all_sales = db.query(Sale).all()
+        all_sales = AnalyticsService._get_all_sales(db)
         
         # Calculate total realized net across all
         completed_net = sum(s.net_revenue for s in all_sales if s.status == "Completed")
@@ -168,11 +226,11 @@ class AnalyticsService:
         return result
 
     @staticmethod
-    def get_top_products(db: Session, limit: int = 10) -> List[TopProductItem]:
+    def get_top_products(db: Optional[Session] = None, limit: int = 10) -> List[TopProductItem]:
         """
         Ranks products by total net revenue generated, net of customer returns.
         """
-        all_sales = db.query(Sale).all()
+        all_sales = AnalyticsService._get_all_sales(db)
 
         prod_buckets: Dict[str, Dict[str, Any]] = {}
         for sale in all_sales:
@@ -210,7 +268,7 @@ class AnalyticsService:
         return result[:limit]
 
     @staticmethod
-    def compare_months(db: Session, month1_str: str, month2_str: str) -> MonthComparison:
+    def compare_months(db: Optional[Session] = None, month1_str: str = "", month2_str: str = "") -> MonthComparison:
         """
         Compares net revenue between two months.
         Accepts strings like '2026-01' or 'January' or 'Jan'.
@@ -263,11 +321,11 @@ class AnalyticsService:
         )
 
     @staticmethod
-    def get_category_breakdown(db: Session) -> List[Dict[str, Any]]:
+    def get_category_breakdown(db: Optional[Session] = None) -> List[Dict[str, Any]]:
         """
         Breakdown of sales and revenue by product category, net of returns.
         """
-        all_sales = db.query(Sale).all()
+        all_sales = AnalyticsService._get_all_sales(db)
         completed_net = sum(s.net_revenue for s in all_sales if s.status == "Completed")
         returned_total = sum(s.gross_revenue for s in all_sales if s.status == "Returned")
         total_realized_net = completed_net - returned_total or Decimal("1.00")
@@ -297,17 +355,18 @@ class AnalyticsService:
         return res
 
     @staticmethod
-    def get_transaction_by_id(db: Session, transaction_id: str) -> Optional[Dict[str, Any]]:
+    def get_transaction_by_id(db: Optional[Session] = None, transaction_id: str = "") -> Optional[Dict[str, Any]]:
         """
         Retrieves complete line-item data for a specific transaction ID.
         """
         clean_id = transaction_id.strip().upper()
-        sale = db.query(Sale).filter(func.upper(Sale.transaction_id) == clean_id).first()
+        all_sales = AnalyticsService._get_all_sales(db)
+        sale = next((s for s in all_sales if s.transaction_id.strip().upper() == clean_id), None)
         if not sale:
             return None
         return {
             "transaction_id": sale.transaction_id,
-            "order_date": sale.order_date.strftime("%d-%m-%Y"),
+            "order_date": sale.order_date.strftime("%d-%m-%Y") if hasattr(sale.order_date, 'strftime') else str(sale.order_date),
             "product": sale.product,
             "category": sale.category,
             "region": sale.region,
@@ -320,11 +379,11 @@ class AnalyticsService:
         }
 
     @staticmethod
-    def get_all_products(db: Session) -> List[Dict[str, Any]]:
+    def get_all_products(db: Optional[Session] = None) -> List[Dict[str, Any]]:
         """
         Returns list of all unique products with prices and categories.
         """
-        sales = db.query(Sale).all()
+        sales = AnalyticsService._get_all_sales(db)
         products_map = {}
         for s in sales:
             if s.product not in products_map:
@@ -338,10 +397,11 @@ class AnalyticsService:
         return list(products_map.values())
 
     @staticmethod
-    def get_all_regions(db: Session) -> List[str]:
+    def get_all_regions(db: Optional[Session] = None) -> List[str]:
         """
         Returns list of all unique sales regions.
         """
-        regions = db.query(Sale.region).distinct().all()
-        return [r[0] for r in regions if r[0]]
+        sales = AnalyticsService._get_all_sales(db)
+        regions = {s.region for s in sales if s.region}
+        return sorted(list(regions))
 

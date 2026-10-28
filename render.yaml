@@ -10,21 +10,20 @@ services:
     plan: free
     rootDir: .
     buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "python backend/init_db.py && uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.8
       - key: DATABASE_URL
         sync: false
-        # Example: mysql+pymysql://USER:PASSWORD@HOST:PORT/salesiq_db?ssl_ca=/etc/ssl/certs/ca-certificates.crt
+        # Optional: mysql+pymysql://USER:PASSWORD@HOST:PORT/salesiq_db?ssl_ca=/etc/ssl/certs/ca-certificates.crt
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
-        value: openai/gpt-oss-120b
+        value: llama-3.3-70b-versatile
       - key: FRONTEND_ORIGIN
-        sync: false
-        # Set to the URL of the deployed frontend static site (e.g. https://salesiq-frontend.onrender.com)
+        value: https://salesiq-frontend.onrender.com
       - key: CSV_PATH
         value: ai_bi_assistant_sales_data_cleaned.csv
 
@@ -44,5 +43,5 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        sync: false
-        # Set to the URL of the deployed backend (e.g. https://salesiq-backend.onrender.com)
+        value: https://salesiq-backend.onrender.com
+

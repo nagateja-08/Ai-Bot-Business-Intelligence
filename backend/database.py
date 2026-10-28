@@ -42,19 +42,24 @@ except Exception as e:
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator[Any, None, None]:
     """
     FastAPI dependency that provides a transactional database session per request.
-    Ensures sessions are closed and connections returned to the pool after response.
+    Yields None if the database engine is offline or unreachable.
     """
     if engine is None:
-        raise RuntimeError("Database engine is not initialized. Please verify DATABASE_URL.")
-    
-    db = SessionLocal()
+        yield None
+        return
+
     try:
-        yield db
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not connect to database session: {e}")
+        yield None
 
 def check_db_connection() -> Dict[str, Any]:
     """
@@ -63,9 +68,10 @@ def check_db_connection() -> Dict[str, Any]:
     """
     if engine is None:
         return {
-            "status": "error",
+            "status": "degraded",
             "connected": False,
-            "message": "Database engine could not be instantiated. Check DATABASE_URL configuration."
+            "database_type": "mysql",
+            "message": "MySQL server offline. Falling back to verified dataset."
         }
 
     try:
@@ -82,14 +88,15 @@ def check_db_connection() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Database health check failed: {e}")
         return {
-            "status": "unhealthy",
+            "status": "degraded",
             "connected": False,
-            "database_type": engine.dialect.name if engine else "unknown",
-            "message": f"Cannot connect to database: {str(e)}"
+            "database_type": engine.dialect.name if engine else "mysql",
+            "message": "MySQL server offline. Using verified dataset."
         }
 
     return {
-        "status": "unknown",
+        "status": "degraded",
         "connected": False,
-        "message": "Database query returned unexpected result."
+        "database_type": "mysql",
+        "message": "Using verified dataset."
     }

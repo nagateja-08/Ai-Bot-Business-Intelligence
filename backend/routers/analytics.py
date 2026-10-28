@@ -108,15 +108,15 @@ def get_sales_records(
     Retrieves sales records with optional filtering.
     """
     try:
-        query = db.query(Sale)
+        all_sales = AnalyticsService._get_all_sales(db)
         if status:
-            query = query.filter(Sale.status == status)
+            all_sales = [s for s in all_sales if s.status.lower() == status.lower()]
         if region:
-            query = query.filter(Sale.region == region)
+            all_sales = [s for s in all_sales if s.region.lower() == region.lower()]
         if category:
-            query = query.filter(Sale.category == category)
-        
-        records = query.order_by(Sale.order_date.desc()).limit(limit).all()
-        return [r.to_dict() for r in records]
+            all_sales = [s for s in all_sales if s.category.lower() == category.lower()]
+        all_sales.sort(key=lambda s: s.order_date, reverse=True)
+        return [r.to_dict() for r in all_sales[:limit]]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch sales records: {str(e)}")
+
